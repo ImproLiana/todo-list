@@ -93,7 +93,7 @@ button {
     padding: 10px 0 11px 40px;
     border-bottom: 1px solid #eceef2;
 }
-.task-item::before,
+
 #quick-add-wrap::before {
     content: "";
     position: absolute;
@@ -494,4 +494,127 @@ button {
 }
 #custom-time-input[aria-invalid="true"] {
     border-color: #ff453a;
+}
+
+.time-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+}
+.time-controls button {
+    width: 28px;
+    height: 32px;
+    padding: 0;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 8px;
+    background: #e5e5ea;
+    font-size: 18px;
+    cursor: pointer;
+}
+.time-controls button:hover {
+    background: #d1d1d6;
+}
+.time-part-input {
+    width: 37px;
+    min-width: 0;
+    padding: 6px 0;
+    box-sizing: border-box;
+    border: 1px solid #e5e5ea;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 600;
+}
+.time-controls span {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+/* .task-item:has(#quick-add-wrap)::before {
+    display: none;
+}
+.task-item:has(#quick-add-wrap) {
+    padding-left: 0;
+}
+
+.task-item:has(#quick-add-wrap) {
+    padding-left: 0;
+    border-bottom: none;
+} */
+
+.task-item:has(#quick-add-wrap) .completed-button,
+.task-item:has(#quick-add-wrap) .delete-task-button {
+    display: none;
+}
+
+.task-item {
+    position: relative;
+    padding-right: 45px;
+}
+.task-item .completed-button {
+    position: absolute;
+    top: 12px;
+    left: 0;
+    z-index: 2;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 2px solid #c9cbd0;
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.task-item .completed-button:hover {
+    border-color: #f59e42;
+    background: #fff5e9;
+}
+.task-item.completed .completed-button {
+    border-color: #f59e42;
+    background: #f59e42;
+}
+.task-item.completed .completed-button::after {
+    content: "✓";
+    display: block;
+    color: white;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+}
+.task-item.completed .task-title {
+    color: #a1a1a8;
+    text-decoration: line-through;
+}
+.task-item.completed .task-note,
+.task-item.completed .task-meta {
+    color: #b8b8bf;
+}
+.task-item .delete-task-button {
+    position: absolute;
+    top: 12px;
+    right: 4px;
+    z-index: 2;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: 9px;
+    background: transparent;
+    font-size: 17px;
+    filter: grayscale(1);
+    opacity: 0.35;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.task-item:hover .delete-task-button {
+    opacity: 0.8;
+}
+.task-item .delete-task-button:hover {
+    background: #fff0ee;
+    filter: grayscale(0);
+    opacity: 1;
 }

@@ -4,6 +4,10 @@ const main = document.createElement("main")
 const heading = document.createElement("h1")
 const navigation = document.createElement("nav")
 const ul = document.createElement("ul")
+let editingId = null
+
+document.title = "To-Do List"
+
 
 aside.id = "sidebar"
 main.id = "app-main"
@@ -35,38 +39,7 @@ function makeButton(text, parent, id) {
     return button
 }
 
-const tasks = [
-    {
-        id: 1,
-        title: "Have a walk",
-        date: "2026-11-05",
-        time: "10:00",
-        note: "with my dog",
-        priority: "2",
-        completed: false,
-        order: 0
-    },
-    {
-        id: 2,
-        title: "Make breakfast",
-        date: "2026-11-05",
-        time: "13:00",
-        note: "",
-        priority: "1",
-        completed: false,
-        order: 2
-    },
-    {
-        id: 3,
-        title: "Read a book",
-        date: "",
-        time: "",
-        note: "",
-        priority: "0",
-        completed: false,
-        order: 1
-    }
-]
+const tasks = JSON.parse(localStorage.getItem("tasks")) ?? []
 
 function addLi(text, parent, id) {
     const li = document.createElement("li")
@@ -85,17 +58,17 @@ function addLi(text, parent, id) {
     div.id = `task-div${id}`
     li.id = `task-li${id}`
 
-    return div
+    return [li, div]
 }
 
-function addTask(title, date, time, note, priority, id, parent) {
+function addTask(title, date, time, note, priority, id, completed, parent) {
     if (priority === "1") {
         title = "❗ " + title
     } else if (priority === "2") {
         title = "‼️ " + title
     }
 
-    const div = addLi(title, parent, id)
+    const [li, div] = addLi(title, parent, id)
 
     if (note) {
         const paragraph = document.createElement("p")
@@ -118,6 +91,55 @@ function addTask(title, date, time, note, priority, id, parent) {
 
         div.appendChild(paragraph)
     }
+
+    const deleteBtn = makeButton('🗑️', div, id)
+    deleteBtn.classList.add("delete-task-button")
+    deleteBtn.addEventListener("click", (event) => {
+        const index = tasks.findIndex(task => task.id === id)
+        if (index !== -1){
+            tasks.splice(index, 1)
+            updateTasks(tasks)
+        }
+        event.stopPropagation()
+    })
+
+    const completedBtn = makeButton('', div)
+    completedBtn.classList.add("completed-button")
+
+    if(completed) {
+        li.classList.add("completed")
+    } 
+
+    completedBtn.addEventListener("click", (event) => {
+        const index = tasks.findIndex(task => task.id === id)
+        if (index !== -1){
+            tasks[index].completed = !tasks[index].completed
+            li.classList.toggle("completed", tasks[index].completed)
+            localStorage.setItem("tasks", JSON.stringify(tasks))
+        }
+        event.stopPropagation()
+    })
+
+    li.addEventListener("click", (event) => {
+    event.stopPropagation()
+
+    if (editingId === id) return
+
+    if (formDiv.style.display === "block") {
+        formNewTask.requestSubmit()
+        if (formDiv.style.display === "block") return
+    }
+
+    editingId = id
+
+    const task = tasks.find(task => task.id === id)
+    const currentLi = document.getElementById(`task-li${id}`)
+
+    if (task && currentLi) {
+        showForm(task, currentLi)
+    }
+})
+
 }
 
 function updateTasks(tasks) {
@@ -133,9 +155,11 @@ function updateTasks(tasks) {
             task.note,
             task.priority,
             task.id,
+            task.completed,
             ul
         )
     }
+    localStorage.setItem("tasks", JSON.stringify(tasks))
 }
 
 updateTasks(tasks)
@@ -228,6 +252,30 @@ const timeButton = makeButton(
 )
 
 const timePanel = document.createElement("div")
+function changeTime(delta) {
+    let value = customTimeInput.value.trim()
+
+    if (!timePattern.test(value)) {
+        value = selectedTime
+    }
+
+    if (!timePattern.test(value)) {
+        value = "09:00"
+    }
+
+    const [hours, minutes] = value.split(":").map(Number)
+    const total = (hours * 60 + minutes + delta + 1440) % 1440
+
+    const newHours = padCalendarNumber(Math.floor(total / 60))
+    const newMinutes = padCalendarNumber(total % 60)
+
+    hourInput.value = newHours
+    minuteInput.value = newMinutes
+    customTimeInput.value = `${newHours}:${newMinutes}`
+
+    customTimeInput.dispatchEvent(new Event("input"))
+}
+
 timePanel.classList.add("ios-time-panel")
 dateTimeDiv.appendChild(timePanel)
 
@@ -236,12 +284,41 @@ timeLabel.classList.add("custom-time-label")
 timeLabel.textContent = "Время, ЧЧ:ММ"
 timePanel.appendChild(timeLabel)
 
+const timeControls = document.createElement("div")
+timeControls.classList.add("time-controls")
+timePanel.appendChild(timeControls)
+
+const minusHour = makeButton("−", timeControls)
+
+const hourInput = document.createElement("input")
+hourInput.classList.add("time-part-input")
+hourInput.type = "text"
+hourInput.inputMode = "numeric"
+hourInput.maxLength = 2
+hourInput.placeholder = "09"
+timeControls.appendChild(hourInput)
+
+const plusHour = makeButton("+", timeControls)
+
+const colon = document.createElement("span")
+colon.textContent = ":"
+timeControls.appendChild(colon)
+
+const minusMinute = makeButton("−", timeControls)
+
+const minuteInput = document.createElement("input")
+minuteInput.classList.add("time-part-input")
+minuteInput.type = "text"
+minuteInput.inputMode = "numeric"
+minuteInput.maxLength = 2
+minuteInput.placeholder = "00"
+timeControls.appendChild(minuteInput)
+
+const plusMinute = makeButton("+", timeControls)
+
 const customTimeInput = document.createElement("input")
 customTimeInput.id = "custom-time-input"
-customTimeInput.type = "text"
-customTimeInput.inputMode = "numeric"
-customTimeInput.maxLength = 5
-customTimeInput.placeholder = "Например, 14:35"
+customTimeInput.type = "hidden"
 timePanel.appendChild(customTimeInput)
 
 const clearTime = makeButton(
@@ -340,6 +417,32 @@ clearDate.addEventListener("click", () => {
 })
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/
+function syncTimeInput() {
+    const hours = hourInput.value.trim()
+    const minutes = minuteInput.value.trim()
+
+    customTimeInput.value = !hours && !minutes
+        ? ""
+        : `${hours ? hours.padStart(2, "0") : ""}:${minutes ? minutes.padStart(2, "0") : ""}`
+
+    customTimeInput.dispatchEvent(new Event("input"))
+}
+
+hourInput.addEventListener("input", syncTimeInput)
+minuteInput.addEventListener("input", syncTimeInput)
+
+for (const input of [hourInput, minuteInput]) {
+    input.addEventListener("blur", () => {
+        if (/^\d{1,2}$/.test(input.value)) {
+            input.value = input.value.padStart(2, "0")
+            syncTimeInput()
+        }
+    })
+}
+minusHour.addEventListener("click", () => changeTime(-60))
+plusHour.addEventListener("click", () => changeTime(60))
+minusMinute.addEventListener("click", () => changeTime(-1))
+plusMinute.addEventListener("click", () => changeTime(1))
 
 customTimeInput.addEventListener("input", () => {
     const value = customTimeInput.value.trim()
@@ -365,12 +468,14 @@ customTimeInput.addEventListener("input", () => {
 clearTime.addEventListener("click", () => {
     selectedTime = ""
     customTimeInput.value = ""
+    hourInput.value = ""
+    minuteInput.value = ""  
     customTimeInput.removeAttribute("aria-invalid")
     timeButton.textContent = "Выбрать время"
 })
 
 timeButton.addEventListener("click", () => {
-    customTimeInput.focus()
+    hourInput.focus()
 })
 
 function positionCalendarPopup() {
@@ -437,6 +542,7 @@ dateTimeDiv.addEventListener("click", (event) => {
 })
 
 function hideForm() {
+    editingId = null
     formDiv.style.display = "none"
 
     titleInput.value = "Задача"
@@ -449,6 +555,8 @@ function hideForm() {
     timeButton.textContent = "Выбрать время"
 
     customTimeInput.value = ""
+    hourInput.value = ""
+    minuteInput.value = ""
     customTimeInput.removeAttribute("aria-invalid")
 
     formPriorityBtn.classList.remove(formPriorityBtn.classList[0])
@@ -461,6 +569,12 @@ formDiv.style.display = "none"
 dateTimeDiv.style.display = "none"
 
 addBtn.addEventListener("click", () => {
+    if (editingId !== null) {
+        formNewTask.requestSubmit()
+        if (editingId !== null) return
+    }
+
+    main.appendChild(formDiv)
     formDiv.style.display = "block"
     titleInput.focus()
     titleInput.select()
@@ -476,6 +590,7 @@ saveTaskButton.addEventListener("click", () => {
     formNewTask.requestSubmit()
 })
 
+
 document.addEventListener("click", (event) => {
     if (formDiv.style.display !== "block") {
         return
@@ -483,7 +598,7 @@ document.addEventListener("click", (event) => {
 
     if (
         formDiv.contains(event.target) ||
-        addBtn.contains(event.target)
+        addBtn.contains(event.target) 
     ) {
         return
     }
@@ -495,8 +610,7 @@ document.addEventListener("click", (event) => {
 
 formNewTask.addEventListener("submit", (event) => {
     event.preventDefault()
-
-    if (!titleInput.value) {
+    if (!titleInput.value.trim()) {
         return
     }
 
@@ -505,6 +619,20 @@ formNewTask.addEventListener("submit", (event) => {
         !timePattern.test(customTimeInput.value.trim())
     ) {
         customTimeInput.focus()
+        return
+    }
+    if (editingId !== null) {
+        const task = tasks.find(task => task.id === editingId)
+        if (task) {
+            task.title = titleInput.value
+            task.note = noteInput.value
+            task.date = selectedDate
+            task.time = selectedTime
+            task.priority = formPriorityBtn.classList[0]
+        }
+        main.appendChild(formDiv)
+        updateTasks(tasks)
+        hideForm()
         return
     }
 
@@ -554,3 +682,25 @@ window.addEventListener("resize", () => {
 })
 
 renderCalendar()
+
+function showForm(task, li) {
+    li.querySelector(".task-content").style.display = "none"
+    li.appendChild(formDiv)
+    formDiv.style.display = "block"
+    titleInput.value = task.title
+    noteInput.value = task.note
+    selectedDate = task.date
+    selectedTime = task.time
+    dateButton.textContent = task.date || "Выбрать дату"
+    timeButton.textContent = task.time || "Выбрать время"
+    customTimeInput.value = task.time || ""
+    const [hours, minutes] = (task.time || "").split(":")
+    hourInput.value = hours || ""
+    minuteInput.value = minutes || ""
+    formPriorityBtn.classList.remove(formPriorityBtn.classList[0])
+    formPriorityBtn.classList.add(task.priority)
+}
+
+formDiv.addEventListener("click", (event) => {
+    event.stopPropagation()
+})
