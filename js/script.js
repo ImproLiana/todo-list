@@ -4,42 +4,201 @@ const main = document.createElement("main")
 const heading = document.createElement("h1")
 const navigation = document.createElement("nav")
 const ul = document.createElement("ul")
+
 let editingId = null
+let activeSection = "today"
+let activeSort = "manual"
+let statusFilter = "all"
+let draggingId = null
+
+const orderType = ["Пользовательская", "Дата", "Приоритет"]
+const sortModes = ["manual", "date", "priority"]
+const filterTypes = ["Все статусы", "Невыполненные", "Выполненные"]
+const filterModes = ["all", "active", "done"]
 
 document.title = "To-Do List"
-
-
 aside.id = "sidebar"
 main.id = "app-main"
 navigation.id = "sidebar-nav"
 ul.id = "task-list"
 
-document.body.appendChild(aside)
-document.body.appendChild(main)
-main.appendChild(heading)
+document.body.append(aside, main)
+main.append(heading)
 heading.textContent = "Сегодня"
-aside.appendChild(navigation)
-main.appendChild(ul)
-
-makeButton("Все дела", navigation)
-const todayBtn = makeButton("Сегодня", navigation)
-makeButton("Ближайшая неделя", navigation)
-makeButton("Просроченные", navigation)
-makeButton("Завершённые", navigation)
-todayBtn.classList.add("nav-active")
+aside.append(navigation)
+main.append(ul)
 
 function makeButton(text, parent, id) {
     const button = document.createElement("button")
-    button.textContent = text
-    parent.appendChild(button)
-    if (id) {
-        button.id = id
-    }
     button.type = "button"
+    button.textContent = text
+    if (id) button.id = id
+    parent.append(button)
     return button
 }
 
+function makeIcon(name, fallback) {
+    const wrapper = document.createElement("span")
+    wrapper.className = "ui-icon"
+
+    const image = document.createElement("img")
+    image.alt = ""
+    image.className = "ui-icon-image"
+    image.width = 20
+    image.height = 20
+    image.style.display = "none"
+
+    const fallbackElement = document.createElement("span")
+    fallbackElement.className = "ui-icon-fallback"
+    fallbackElement.textContent = fallback
+
+    image.addEventListener("load", () => {
+        image.style.display = "block"
+        fallbackElement.style.display = "none"
+    })
+
+    image.addEventListener("error", () => {
+        image.style.display = "none"
+        fallbackElement.style.display = "inline"
+    })
+
+    image.src = `icons/${name}.png`
+    wrapper.append(image, fallbackElement)
+    return wrapper
+}
+
+function setButtonIcon(button, name, fallback, label = "") {
+    button.replaceChildren(makeIcon(name, fallback))
+    if (label) {
+        const textSpan = document.createElement("span")
+        textSpan.className = "button-label"
+        textSpan.textContent = label
+        button.append(textSpan)
+    }
+}
+
+const allTasksBtn = makeButton("", navigation)
+const todayBtn = makeButton("", navigation)
+const nextWeekBtn = makeButton("", navigation)
+const overdueBtn = makeButton("", navigation)
+const completedBtn = makeButton("", navigation)
+
+setButtonIcon(allTasksBtn, "all", "▤", "Все дела")
+setButtonIcon(todayBtn, "today", "◷", "Сегодня")
+setButtonIcon(nextWeekBtn, "week", "▦", "Ближайшая неделя")
+setButtonIcon(overdueBtn, "overdue", "!", "Просроченные")
+setButtonIcon(completedBtn, "completed", "✓", "Завершённые")
+todayBtn.classList.add("nav-active")
+
+const toolbar = document.createElement("div")
+toolbar.id = "task-toolbar"
+main.insertBefore(toolbar, ul)
+
+const searchWrap = document.createElement("div")
+searchWrap.id = "task-search-wrap"
+searchWrap.append(makeIcon("search", "⌕"))
+
+const searchInput = document.createElement("input")
+searchInput.id = "task-search-input"
+searchInput.type = "search"
+searchInput.placeholder = "Поиск по названию или дате"
+searchInput.autocomplete = "off"
+searchInput.setAttribute("aria-label", "Поиск задач")
+searchWrap.append(searchInput)
+toolbar.append(searchWrap)
+
+const orderBtn = makeButton("", toolbar, "task-sort-button")
+orderBtn.classList.add("sort-control")
+
+const statusBtn = makeButton("", toolbar, "task-status-button")
+statusBtn.classList.add("status-control")
+
+function updateSortButton() {
+    const index = sortModes.indexOf(activeSort)
+
+    orderBtn.replaceChildren(
+        makeIcon("settings", "⚙"),
+        makeIcon(`sort-${activeSort}`, "↕")
+    )
+
+    const label = document.createElement("span")
+    label.className = "button-label"
+    label.textContent = orderType[index]
+    orderBtn.append(label)
+    orderBtn.title = "Сменить сортировку"
+}
+
+function updateStatusButton() {
+    const index = filterModes.indexOf(statusFilter)
+
+    const iconName = statusFilter === "all"
+        ? "filter-all"
+        : statusFilter === "active"
+            ? "filter-active"
+            : "filter-done"
+
+    const fallback = statusFilter === "all"
+        ? "◉"
+        : statusFilter === "active"
+            ? "○"
+            : "✓"
+
+    setButtonIcon(statusBtn, iconName, fallback, filterTypes[index])
+    statusBtn.title = "Фильтр по выполнению"
+}
+
+updateSortButton()
+updateStatusButton()
+
+const emptyState = document.createElement("p")
+emptyState.id = "task-empty-state"
+emptyState.textContent = "Задач пока нет"
+main.insertBefore(emptyState, ul.nextSibling)
+
 const tasks = JSON.parse(localStorage.getItem("tasks")) ?? []
+
+function saveTasks() {
+    localStorage.setItem("tasks", JSON.stringify(tasks))
+}
+
+function getTodayTasks() {
+    const today = new Date()
+
+    const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+
+    return tasks.filter(task => task.date === todayString)
+}
+
+function getNextWeekTasks() {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const endDate = new Date(today)
+    endDate.setDate(endDate.getDate() + 7)
+
+    return tasks.filter(task => {
+        if (!task.date) return false
+
+        const taskDate = new Date(`${task.date}T00:00:00`)
+        return taskDate >= today && taskDate < endDate
+    })
+}
+
+function getOverdueTasks() {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    return tasks.filter(task => {
+        if (!task.date) return false
+
+        const taskDate = new Date(`${task.date}T00:00:00`)
+        return taskDate < today && !task.completed
+    })
+}
+
+function getCompletedTasks() {
+    return tasks.filter(task => task.completed)
+}
 
 function addLi(text, parent, id) {
     const li = document.createElement("li")
@@ -62,19 +221,17 @@ function addLi(text, parent, id) {
 }
 
 function addTask(title, date, time, note, priority, id, completed, parent) {
-    if (priority === "1") {
-        title = "❗ " + title
-    } else if (priority === "2") {
-        title = "‼️ " + title
-    }
+    if (priority === "1") title = "❗ " + title
+    else if (priority === "2") title = "‼️ " + title
 
     const [li, div] = addLi(title, parent, id)
+    li.dataset.taskId = String(id)
 
     if (note) {
         const paragraph = document.createElement("p")
         paragraph.textContent = note
         paragraph.classList.add("task-note")
-        div.appendChild(paragraph)
+        div.append(paragraph)
     }
 
     if (date || time) {
@@ -89,63 +246,209 @@ function addTask(title, date, time, note, priority, id, completed, parent) {
             .filter(Boolean)
             .join(", ")
 
-        div.appendChild(paragraph)
+        div.append(paragraph)
     }
 
-    const deleteBtn = makeButton('🗑️', div, id)
+    const deleteBtn = makeButton("", div)
     deleteBtn.classList.add("delete-task-button")
-    deleteBtn.addEventListener("click", (event) => {
-        const index = tasks.findIndex(task => task.id === id)
-        if (index !== -1){
-            tasks.splice(index, 1)
-            updateTasks(tasks)
-        }
+    deleteBtn.setAttribute("aria-label", "Удалить задачу")
+    setButtonIcon(deleteBtn, "trash", "🗑")
+
+    deleteBtn.addEventListener("click", event => {
         event.stopPropagation()
+        if (!finishOpenForm()) return
+
+        const index = tasks.findIndex(task => task.id === id)
+        if (index === -1) return
+
+        tasks.splice(index, 1)
+        saveTasks()
+        updateTasks()
     })
 
-    const completedBtn = makeButton('', div)
+    const completedBtn = makeButton("", div)
     completedBtn.classList.add("completed-button")
+    completedBtn.setAttribute(
+        "aria-label",
+        completed ? "Отметить невыполненной" : "Отметить выполненной"
+    )
 
-    if(completed) {
-        li.classList.add("completed")
-    } 
+    if (completed) li.classList.add("completed")
 
-    completedBtn.addEventListener("click", (event) => {
-        const index = tasks.findIndex(task => task.id === id)
-        if (index !== -1){
-            tasks[index].completed = !tasks[index].completed
-            li.classList.toggle("completed", tasks[index].completed)
-            localStorage.setItem("tasks", JSON.stringify(tasks))
-        }
+    completedBtn.addEventListener("click", event => {
+        event.stopPropagation()
+        if (!finishOpenForm()) return
+
+        const task = tasks.find(task => task.id === id)
+        if (!task) return
+
+        task.completed = !task.completed
+        saveTasks()
+        updateTasks()
+    })
+
+    const dragHandle = makeButton("", div)
+    dragHandle.classList.add("drag-handle")
+    dragHandle.setAttribute("aria-label", "Перетащить задачу")
+
+    dragHandle.title = activeSort === "manual"
+        ? "Потяни, чтобы изменить порядок"
+        : "Доступно при пользовательской сортировке"
+
+    setButtonIcon(dragHandle, "drag", "⋮⋮")
+    dragHandle.draggable = activeSort === "manual"
+    dragHandle.disabled = activeSort !== "manual"
+
+    dragHandle.addEventListener("click", event => {
         event.stopPropagation()
     })
 
-    li.addEventListener("click", (event) => {
-    event.stopPropagation()
+    dragHandle.addEventListener("dragstart", event => {
+        event.stopPropagation()
 
-    if (editingId === id) return
+        if (activeSort !== "manual" || formDiv.style.display === "block") {
+            event.preventDefault()
+            return
+        }
 
-    if (formDiv.style.display === "block") {
-        formNewTask.requestSubmit()
-        if (formDiv.style.display === "block") return
-    }
+        draggingId = id
+        event.dataTransfer.effectAllowed = "move"
+        event.dataTransfer.setData("text/plain", String(id))
+        li.classList.add("is-dragging")
+    })
 
-    editingId = id
+    dragHandle.addEventListener("dragend", () => {
+        draggingId = null
+        clearDragClasses()
+    })
 
-    const task = tasks.find(task => task.id === id)
-    const currentLi = document.getElementById(`task-li${id}`)
+    li.addEventListener("dragover", event => {
+        if (
+            activeSort !== "manual" ||
+            draggingId === null ||
+            draggingId === id
+        ) return
 
-    if (task && currentLi) {
-        showForm(task, currentLi)
-    }
-})
+        event.preventDefault()
+        event.stopPropagation()
+        event.dataTransfer.dropEffect = "move"
 
+        clearDropClasses()
+
+        const rect = li.getBoundingClientRect()
+        const after = event.clientY >= rect.top + rect.height / 2
+
+        li.classList.add(after ? "drop-after" : "drop-before")
+    })
+
+    li.addEventListener("dragleave", event => {
+        if (!li.contains(event.relatedTarget)) {
+            li.classList.remove("drop-before", "drop-after")
+        }
+    })
+
+    li.addEventListener("drop", event => {
+        if (draggingId === null || activeSort !== "manual") return
+
+        event.preventDefault()
+        event.stopPropagation()
+
+        const rect = li.getBoundingClientRect()
+        const after = event.clientY >= rect.top + rect.height / 2
+        const fromId = draggingId
+
+        draggingId = null
+        clearDragClasses()
+        reorderTasks(fromId, id, after)
+    })
+
+    li.addEventListener("click", event => {
+        event.stopPropagation()
+
+        if (editingId === id) return
+        if (!finishOpenForm()) return
+
+        const task = tasks.find(task => task.id === id)
+        const currentLi = document.getElementById(`task-li${id}`)
+
+        if (task && currentLi) {
+            editingId = id
+            showForm(task, currentLi)
+        }
+    })
 }
 
-function updateTasks(tasks) {
-    ul.replaceChildren()
+function getVisibleTasks() {
+    let visibleTasks
 
-    const sortedTasks = [...tasks].sort((a, b) => a.order - b.order)
+    if (activeSection === "today") {
+        visibleTasks = getTodayTasks()
+    } else if (activeSection === "week") {
+        visibleTasks = getNextWeekTasks()
+    } else if (activeSection === "overdue") {
+        visibleTasks = getOverdueTasks()
+    } else if (activeSection === "completed") {
+        visibleTasks = getCompletedTasks()
+    } else {
+        visibleTasks = [...tasks]
+    }
+
+    if (statusFilter === "active") {
+        visibleTasks = visibleTasks.filter(task => !task.completed)
+    } else if (statusFilter === "done") {
+        visibleTasks = visibleTasks.filter(task => task.completed)
+    }
+
+    const query = searchInput.value.trim().toLocaleLowerCase("ru-RU")
+
+    if (query) {
+        visibleTasks = visibleTasks.filter(task => {
+            const dateReadable = task.date
+                ? new Date(`${task.date}T00:00:00`).toLocaleDateString("ru-RU")
+                : ""
+
+            const searchableText = [
+                task.title,
+                task.note,
+                task.date,
+                dateReadable
+            ]
+                .filter(Boolean)
+                .join(" ")
+                .toLocaleLowerCase("ru-RU")
+
+            return searchableText.includes(query)
+        })
+    }
+
+    return visibleTasks
+}
+
+function sortTasks(source) {
+    const result = [...source]
+
+    if (activeSort === "date") {
+        result.sort((a, b) =>
+            (a.date || "9999-12-31").localeCompare(b.date || "9999-12-31") ||
+            (a.time || "23:59").localeCompare(b.time || "23:59") ||
+            a.order - b.order
+        )
+    } else if (activeSort === "priority") {
+        result.sort(
+            (a, b) =>
+                Number(b.priority) - Number(a.priority) ||
+                a.order - b.order
+        )
+    } else {
+        result.sort((a, b) => a.order - b.order)
+    }
+
+    return result
+}
+
+function updateTasks() {
+    const sortedTasks = sortTasks(getVisibleTasks())
+    ul.replaceChildren()
 
     for (const task of sortedTasks) {
         addTask(
@@ -159,10 +462,103 @@ function updateTasks(tasks) {
             ul
         )
     }
-    localStorage.setItem("tasks", JSON.stringify(tasks))
+
+    emptyState.style.display = sortedTasks.length ? "none" : "block"
+
+    emptyState.textContent = searchInput.value.trim()
+        ? "По вашему запросу ничего не найдено"
+        : "В этом разделе пока нет задач"
 }
 
-updateTasks(tasks)
+function clearDropClasses() {
+    for (const item of ul.querySelectorAll(".drop-before, .drop-after")) {
+        item.classList.remove("drop-before", "drop-after")
+    }
+}
+
+function clearDragClasses() {
+    for (const item of ul.querySelectorAll(
+        ".is-dragging, .drop-before, .drop-after"
+    )) {
+        item.classList.remove("is-dragging", "drop-before", "drop-after")
+    }
+}
+
+function reorderTasks(fromId, targetId, after) {
+    if (activeSort !== "manual" || fromId === targetId) return
+
+    const fullOrder = [...tasks].sort((a, b) => a.order - b.order)
+
+    const visibleIds = new Set(
+        getVisibleTasks().map(task => task.id)
+    )
+
+    const newVisibleIds = fullOrder
+        .filter(task => visibleIds.has(task.id))
+        .map(task => task.id)
+
+    const fromIndex = newVisibleIds.indexOf(fromId)
+
+    if (fromIndex === -1 || !newVisibleIds.includes(targetId)) return
+
+    newVisibleIds.splice(fromIndex, 1)
+
+    const targetIndex = newVisibleIds.indexOf(targetId)
+
+    newVisibleIds.splice(
+        targetIndex + (after ? 1 : 0),
+        0,
+        fromId
+    )
+
+    const byId = new Map(
+        tasks.map(task => [task.id, task])
+    )
+
+    let i = 0
+
+    const newFullOrder = fullOrder.map(task =>
+        visibleIds.has(task.id)
+            ? byId.get(newVisibleIds[i++])
+            : task
+    )
+
+    newFullOrder.forEach((task, index) => {
+        task.order = index
+    })
+
+    saveTasks()
+    updateTasks()
+}
+
+searchInput.addEventListener("input", () => {
+    if (!finishOpenForm()) return
+    updateTasks()
+})
+
+orderBtn.addEventListener("click", () => {
+    if (!finishOpenForm()) return
+
+    const nextIndex =
+        (sortModes.indexOf(activeSort) + 1) % sortModes.length
+
+    activeSort = sortModes[nextIndex]
+    updateSortButton()
+    updateTasks()
+})
+
+statusBtn.addEventListener("click", () => {
+    if (!finishOpenForm()) return
+
+    const nextIndex =
+        (filterModes.indexOf(statusFilter) + 1) % filterModes.length
+
+    statusFilter = filterModes[nextIndex]
+    updateStatusButton()
+    updateTasks()
+})
+
+updateTasks()
 
 const addBtn = makeButton("+", main, "add-task-button")
 
@@ -182,10 +578,12 @@ const noteInput = document.createElement("textarea")
 noteInput.id = "task-note-input"
 noteInput.placeholder = "Добавить заметку"
 
-const formPriorityBtn = makeButton("⚑", formNewTask, "priority-button")
+const formPriorityBtn = makeButton("", formNewTask, "priority-button")
 formPriorityBtn.classList.add("0")
+setButtonIcon(formPriorityBtn, "flag", "⚑")
 
-const dateTimeButton = makeButton("▦", formNewTask, "date-time-button")
+const dateTimeButton = makeButton("", formNewTask, "date-time-button")
+setButtonIcon(dateTimeButton, "calendar", "▦")
 
 formNewTask.appendChild(titleInput)
 formNewTask.appendChild(noteInput)
@@ -252,6 +650,7 @@ const timeButton = makeButton(
 )
 
 const timePanel = document.createElement("div")
+
 function changeTime(delta) {
     let value = customTimeInput.value.trim()
 
@@ -342,6 +741,46 @@ function padCalendarNumber(number) {
     return String(number).padStart(2, "0")
 }
 
+function getDefaultTaskDate() {
+    const date = new Date()
+
+    if (activeSection === "today") {
+        return `${date.getFullYear()}-${padCalendarNumber(date.getMonth() + 1)}-${padCalendarNumber(date.getDate())}`
+    }
+
+    if (activeSection === "week") {
+        const daysUntilSunday = (7 - date.getDay()) % 7
+        date.setDate(date.getDate() + daysUntilSunday)
+
+        return `${date.getFullYear()}-${padCalendarNumber(date.getMonth() + 1)}-${padCalendarNumber(date.getDate())}`
+    }
+
+    return ""
+}
+
+function prepareNewTaskDate() {
+    selectedDate = getDefaultTaskDate()
+
+    if (selectedDate) {
+        const [year, month, day] = selectedDate.split("-").map(Number)
+        const date = new Date(year, month - 1, day)
+
+        displayedMonth = new Date(year, month - 1, 1)
+
+        dateButton.textContent = date.toLocaleDateString("ru-RU", {
+            day: "numeric",
+            month: "long",
+            year: "numeric"
+        })
+    } else {
+        const today = new Date()
+        displayedMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+        dateButton.textContent = "Выбрать дату"
+    }
+
+    renderCalendar()
+}
+
 function renderCalendar() {
     daysGrid.replaceChildren()
 
@@ -417,6 +856,7 @@ clearDate.addEventListener("click", () => {
 })
 
 const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/
+
 function syncTimeInput() {
     const hours = hourInput.value.trim()
     const minutes = minuteInput.value.trim()
@@ -439,6 +879,7 @@ for (const input of [hourInput, minuteInput]) {
         }
     })
 }
+
 minusHour.addEventListener("click", () => changeTime(-60))
 plusHour.addEventListener("click", () => changeTime(60))
 minusMinute.addEventListener("click", () => changeTime(-1))
@@ -469,7 +910,7 @@ clearTime.addEventListener("click", () => {
     selectedTime = ""
     customTimeInput.value = ""
     hourInput.value = ""
-    minuteInput.value = ""  
+    minuteInput.value = ""
     customTimeInput.removeAttribute("aria-invalid")
     timeButton.textContent = "Выбрать время"
 })
@@ -478,24 +919,27 @@ timeButton.addEventListener("click", () => {
     hourInput.focus()
 })
 
+
 function positionCalendarPopup() {
     const anchor = dateTimeButton.getBoundingClientRect()
+    const formRect = formDiv.getBoundingClientRect()
     const popup = dateTimeDiv.getBoundingClientRect()
 
-    const left = Math.max(
-        12,
-        Math.min(
-            anchor.right + 20,
-            window.innerWidth - popup.width - 12
-        )
-    )
+    let left = formRect.right + 14
 
-    const top = Math.max(
+    if (left + popup.width > window.innerWidth - 12) {
+        left = anchor.right + 14
+    }
+
+    if (left + popup.width > window.innerWidth - 12) {
+        left = Math.max(12, anchor.left - popup.width - 14)
+    }
+
+    let top = anchor.top - 12
+
+    top = Math.max(
         12,
-        Math.min(
-            anchor.top - 65,
-            window.innerHeight - popup.height - 12
-        )
+        Math.min(top, window.innerHeight - popup.height - 12)
     )
 
     dateTimeDiv.style.left = `${left}px`
@@ -511,6 +955,7 @@ function positionCalendarPopup() {
 
     dateTimeDiv.style.setProperty("--arrow-top", `${arrowTop}px`)
 }
+
 
 function openCalendarPopup() {
     dateTimeDiv.style.display = "block"
@@ -537,7 +982,7 @@ calendarDone.addEventListener("click", () => {
     dateTimeDiv.style.display = "none"
 })
 
-dateTimeDiv.addEventListener("click", (event) => {
+dateTimeDiv.addEventListener("click", event => {
     event.stopPropagation()
 })
 
@@ -568,19 +1013,26 @@ function hideForm() {
 formDiv.style.display = "none"
 dateTimeDiv.style.display = "none"
 
+function finishOpenForm() {
+    if (formDiv.style.display !== "block") return true
+    formNewTask.requestSubmit()
+    return formDiv.style.display !== "block"
+}
+
 addBtn.addEventListener("click", () => {
-    if (editingId !== null) {
-        formNewTask.requestSubmit()
-        if (editingId !== null) return
-    }
+    if (activeSection === "overdue" || activeSection === "completed") return
+    if (!finishOpenForm()) return
 
     main.appendChild(formDiv)
     formDiv.style.display = "block"
+
+    prepareNewTaskDate()
+
     titleInput.focus()
     titleInput.select()
 })
 
-titleInput.addEventListener("keydown", (event) => {
+titleInput.addEventListener("keydown", event => {
     if (event.key === "Enter") {
         event.preventDefault()
     }
@@ -590,15 +1042,12 @@ saveTaskButton.addEventListener("click", () => {
     formNewTask.requestSubmit()
 })
 
-
-document.addEventListener("click", (event) => {
-    if (formDiv.style.display !== "block") {
-        return
-    }
+document.addEventListener("click", event => {
+    if (formDiv.style.display !== "block") return
 
     if (
         formDiv.contains(event.target) ||
-        addBtn.contains(event.target) 
+        addBtn.contains(event.target)
     ) {
         return
     }
@@ -608,21 +1057,29 @@ document.addEventListener("click", (event) => {
     }
 })
 
-formNewTask.addEventListener("submit", (event) => {
+formNewTask.addEventListener("submit", event => {
     event.preventDefault()
-    if (!titleInput.value.trim()) {
+
+        if (
+        editingId === null &&
+        (activeSection === "overdue" || activeSection === "completed")
+    ) {
         return
     }
+
+    if (!titleInput.value.trim()) return
 
     if (
         customTimeInput.value.trim() &&
         !timePattern.test(customTimeInput.value.trim())
     ) {
-        customTimeInput.focus()
+        hourInput.focus()
         return
     }
+
     if (editingId !== null) {
         const task = tasks.find(task => task.id === editingId)
+
         if (task) {
             task.title = titleInput.value
             task.note = noteInput.value
@@ -630,9 +1087,11 @@ formNewTask.addEventListener("submit", (event) => {
             task.time = selectedTime
             task.priority = formPriorityBtn.classList[0]
         }
+
         main.appendChild(formDiv)
-        updateTasks(tasks)
         hideForm()
+        saveTasks()
+        updateTasks()
         return
     }
 
@@ -655,13 +1114,13 @@ formNewTask.addEventListener("submit", (event) => {
         completed: false
     })
 
-    updateTasks(tasks)
     hideForm()
+    saveTasks()
+    updateTasks()
 })
 
 formPriorityBtn.addEventListener("click", () => {
     const prior = formPriorityBtn.classList[0]
-
     formPriorityBtn.classList.remove(prior)
 
     formPriorityBtn.classList.add(
@@ -687,20 +1146,72 @@ function showForm(task, li) {
     li.querySelector(".task-content").style.display = "none"
     li.appendChild(formDiv)
     formDiv.style.display = "block"
+
     titleInput.value = task.title
     noteInput.value = task.note
     selectedDate = task.date
     selectedTime = task.time
+
+    if (task.date) {
+        const [year, month] = task.date.split("-").map(Number)
+        displayedMonth = new Date(year, month - 1, 1)
+    }
+
     dateButton.textContent = task.date || "Выбрать дату"
     timeButton.textContent = task.time || "Выбрать время"
     customTimeInput.value = task.time || ""
+
     const [hours, minutes] = (task.time || "").split(":")
     hourInput.value = hours || ""
     minuteInput.value = minutes || ""
+
     formPriorityBtn.classList.remove(formPriorityBtn.classList[0])
     formPriorityBtn.classList.add(task.priority)
 }
 
-formDiv.addEventListener("click", (event) => {
+formDiv.addEventListener("click", event => {
     event.stopPropagation()
 })
+
+const sectionButtons = {
+    all: allTasksBtn,
+    today: todayBtn,
+    week: nextWeekBtn,
+    overdue: overdueBtn,
+    completed: completedBtn
+}
+
+function setSection(section) {
+    if (!finishOpenForm()) return
+
+    activeSection = section
+
+    addBtn.style.display =
+    section === "overdue" || section === "completed"
+        ? "none"
+        : "grid"
+
+    const labels = {
+        all: "Все дела",
+        today: "Сегодня",
+        week: "Ближайшая неделя",
+        overdue: "Просроченные",
+        completed: "Завершённые"
+    }
+
+    heading.textContent = labels[section]
+
+    statusFilter = "all"
+    updateStatusButton()
+
+    for (const button of Object.values(sectionButtons)) {
+        button.classList.remove("nav-active")
+    }
+
+    sectionButtons[section].classList.add("nav-active")
+    updateTasks()
+}
+
+for (const [section, button] of Object.entries(sectionButtons)) {
+    button.addEventListener("click", () => setSection(section))
+}
